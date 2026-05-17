@@ -38,5 +38,6 @@ dependencies:
   - pip
   - pip:
       - timm
+      - boto3
       - albumentations
       - transformers
