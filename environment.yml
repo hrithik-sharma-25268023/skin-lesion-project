@@ -1,1 +1,42 @@
-name: skin_lesion_project
+name: skin-lesion-project
+
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10.8
+
+  # Core ML
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=11.8
+
+  # Data
+  - numpy
+  - pandas
+  - scikit-learn
+
+  # Images
+  - pillow
+  - opencv
+
+  # Visualization
+  - matplotlib
+  - plotly
+  - seaborn
+
+  # Utilities
+  - tqdm
+  - pyyaml
+  - ipykernel
+
+  # Pip
+  - pip
+  - pip:
+      - timm
+      - albumentations
+      - transformers
