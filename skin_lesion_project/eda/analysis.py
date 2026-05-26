@@ -1,7 +1,6 @@
 """module for Exploratory Data Analysis of the Dataset"""
 
 import os
-from pathlib import Path
 import random
 from typing import Tuple
 
@@ -10,7 +9,6 @@ from matplotlib import gridspec as gsc
 import numpy as np
 import pandas as pd
 from PIL import Image
-import seaborn as sns
 from tqdm import tqdm
 
 from skin_lesion_project.utils.eda_utils import LABEL_COLS, PALETTE, CLASS_NAMES
@@ -82,3 +80,81 @@ def plot_sample_grid(data: pd.DataFrame, image_dir: str, n_per_class: int = 5) -
 
     plt.tight_layout()
     plt.show()
+
+
+def plot_image_sizes(data: pd.DataFrame, image_dir: str, max_images: int=3000) -> None:
+    """Plots distributions of image widths, heights, and aspect ratios from a random sample of dataset images."""
+
+    sample_df = data.sample(min(max_images, len(data)), random_state=42)
+    widths, heights, aspects = [], [], []
+ 
+    for fname in tqdm(sample_df["image"], leave=False):
+        try:
+            with Image.open(os.path.join(image_dir, fname)) as img:
+                w, h = img.size
+                widths.append(w)
+                heights.append(h)
+                aspects.append(w / h)
+        except Exception:
+            pass
+ 
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4))
+    fig.suptitle("Image Size Distribution", fontsize=14, fontweight="bold")
+ 
+    axes[0].hist(widths,  bins=40, color="#378ADD", edgecolor="white")
+    axes[0].set_title("Width distribution")
+    axes[0].set_xlabel("pixels")
+    axes[0].axvline(np.median(widths), color="red", linestyle="--", label=f"median={int(np.median(widths))}")
+    axes[0].legend()
+ 
+    axes[1].hist(heights, bins=40, color="#1D9E75", edgecolor="white")
+    axes[1].set_title("Height distribution")
+    axes[1].set_xlabel("pixels")
+    axes[1].axvline(np.median(heights), color="red", linestyle="--", label=f"median={int(np.median(heights))}")
+    axes[1].legend()
+    axes[2].scatter(widths, heights, alpha=0.3, s=8, color="#534AB7")
+    axes[2].set_title("Width vs Height")
+    axes[2].set_xlabel("Width"); axes[2].set_ylabel("Height")
+ 
+    plt.tight_layout()
+    print(f"Width median={int(np.median(widths))}, min={min(widths)}, max={max(widths)}")
+    print(f"Height median={int(np.median(heights))}, min={min(heights)}, max={max(heights)}")
+
+
+def plot_pixel_stats(data: pd.DataFrame, image_dir: str, n_samples: int = 500) -> None:
+    """Plots the pixel intensity of RGB images"""
+
+    per_class = max(1, n_samples // len(LABEL_COLS))
+    sampled_indices = set()
+    for col in LABEL_COLS:
+        idx = data[data[col] == 1].sample(min(per_class, (data[col]==1).sum()), random_state=42).index.tolist()
+        sampled_indices.update(idx)
+    sample_df = data.loc[list(sampled_indices)]
+    channel_means = {col: {"R": [], "G": [], "B": []} for col in LABEL_COLS}
+    for _, row in tqdm(sample_df.iterrows(), total=len(sample_df), leave=False):
+        dominant_class = LABEL_COLS[np.argmax(row[LABEL_COLS].values)]
+        try:
+            img = np.array(
+                Image.open(os.path.join(image_dir, row["image"])).convert("RGB").resize((128,128)))
+            channel_means[dominant_class]["R"].append(img[:,:,0].mean())
+            channel_means[dominant_class]["G"].append(img[:,:,1].mean())
+            channel_means[dominant_class]["B"].append(img[:,:,2].mean())
+        except Exception:
+            pass
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    fig.suptitle("Mean Channel Intensity per Class", fontsize=14, fontweight="bold")
+ 
+    for ch_idx, (ch, color) in enumerate([("R","#E24B4A"),("G","#1D9E75"),("B","#378ADD")]):
+        means = [np.mean(channel_means[c][ch]) if channel_means[c][ch] else 0
+                 for c in LABEL_COLS]
+        stds  = [np.std(channel_means[c][ch])  if channel_means[c][ch] else 0
+                 for c in LABEL_COLS]
+        short = [CLASS_NAMES[c].split()[0] for c in LABEL_COLS]
+        axes[ch_idx].bar(short, means, yerr=stds, color=color, alpha=0.8, edgecolor="white", capsize=4)
+        axes[ch_idx].set_title(f"{ch} channel mean ± std")
+        axes[ch_idx].set_ylim(0, 255)
+        axes[ch_idx].tick_params(axis="x", rotation=35)
+        axes[ch_idx].set_ylabel("Pixel intensity (0–255)")
+ 
+    plt.tight_layout()
