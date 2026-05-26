@@ -43,26 +43,42 @@ def plot_class_distribution(data: pd.DataFrame) -> Tuple:
     return counts, pct
 
 
-def plot_sample_grid(data: pd.DataFrame, image_dir: str, n_per_class: int=5) -> None:
-    """displays the images from the directory for each Label"""
+def plot_sample_grid(data: pd.DataFrame, image_dir: str, n_per_class: int = 5) -> None:
+    """Displays sample images for each class with filenames."""
 
-    fig = plt.figure(figsize=(n_per_class * 2.2, len(LABEL_COLS) * 2.2))
-    fig.suptitle("Sample Images per Class", fontsize=14, fontweight="bold", y=1.01)
- 
+    n_rows = len(LABEL_COLS)
+    fig, axes = plt.subplots(n_rows, n_per_class, figsize=(n_per_class * 2.5, n_rows * 2.8))
+    fig.suptitle("Sample Images per Class", fontsize=14, fontweight="bold", y=1.02)
+    if n_rows == 1:
+        axes = [axes]
+
     for row_idx, col in enumerate(LABEL_COLS):
+
         samples = data[data[col] == 1]["image"].tolist()
         samples = random.sample(samples, min(n_per_class, len(samples)))
- 
-        for col_idx, fname in enumerate(samples):
-            ax = fig.add_subplot(len(LABEL_COLS), n_per_class, row_idx * n_per_class + col_idx + 1)
+
+        for col_idx in range(n_per_class):
+
+            ax = axes[row_idx][col_idx]
+            if col_idx >= len(samples):
+                ax.axis("off")
+                continue
+
+            fname = samples[col_idx]
             img_path = os.path.join(image_dir, fname)
+
             try:
                 img = Image.open(img_path).convert("RGB").resize((128, 128))
                 ax.imshow(img)
+
             except Exception:
                 ax.set_facecolor("#ddd")
                 ax.text(0.5, 0.5, "N/A", ha="center", va="center", transform=ax.transAxes, fontsize=8, color="#999")
-            ax.axis("off")
-            if col_idx == 0:
-                ax.set_ylabel(CLASS_NAMES[col], fontsize=9, labelpad=6, rotation=0, ha="right", va="center")
+
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_xlabel(fname, fontsize=7, labelpad=5)
+        axes[row_idx][0].annotate(CLASS_NAMES[col], xy=(-0.45, 0.5), xycoords="axes fraction", fontsize=10, fontweight="bold", ha="right", va="center")
+
     plt.tight_layout()
+    plt.show()
