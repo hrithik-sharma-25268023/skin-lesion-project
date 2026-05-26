@@ -1,6 +1,9 @@
 """module for Exploratory Data Analysis of the Dataset"""
 
+import os
 from pathlib import Path
+import random
+from typing import Tuple
 
 from matplotlib import pyplot as plt
 from matplotlib import gridspec as gsc
@@ -13,7 +16,7 @@ from tqdm import tqdm
 from skin_lesion_project.utils.eda_utils import LABEL_COLS, PALETTE, CLASS_NAMES
 
 
-def plot_class_distribution(data: pd.DataFrame):
+def plot_class_distribution(data: pd.DataFrame) -> Tuple:
     """Plots the bar chart and pie chart of the classes."""
 
     counts = data[LABEL_COLS].sum().rename(CLASS_NAMES).sort_values(ascending=False)
@@ -22,22 +25,44 @@ def plot_class_distribution(data: pd.DataFrame):
     fig, axes = plt.subplots(1, 2, figsize=(16, 5))
     fig.suptitle("Class Distribution", fontsize=15, fontweight="bold")
 
-    # Bar chart
+    # Bar Chart
     bars = axes[0].bar(counts.index, counts.values, color=PALETTE, edgecolor="white", linewidth=0.8)
     axes[0].set_title("Absolute count per class")
     axes[0].set_ylabel("Number of images")
     axes[0].tick_params(axis="x", rotation=35)
 
+    # Pie Chart
     for bar, val in zip(bars, counts.values):
         axes[0].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 10, str(int(val)), ha="center", va="bottom", fontsize=9)
-
-    # Pie chart WITHOUT labels on chart
     wedges, _ = axes[1].pie(counts.values, colors=PALETTE, startangle=140, wedgeprops={"edgecolor": "white", "linewidth": 1.2})
     axes[1].set_title("Proportion per class")
-
-    # Legend with class name + percentage
     legend_labels = [f"{label} ({percent}%)" for label, percent in zip(counts.index, pct.values)]
     axes[1].legend(wedges, legend_labels, title="Classes", loc="center left", bbox_to_anchor=(1, 0.5))
-
     plt.tight_layout()
+
     return counts, pct
+
+
+def plot_sample_grid(data: pd.DataFrame, image_dir: str, n_per_class: int=5) -> None:
+    """displays the images from the directory for each Label"""
+
+    fig = plt.figure(figsize=(n_per_class * 2.2, len(LABEL_COLS) * 2.2))
+    fig.suptitle("Sample Images per Class", fontsize=14, fontweight="bold", y=1.01)
+ 
+    for row_idx, col in enumerate(LABEL_COLS):
+        samples = data[data[col] == 1]["image"].tolist()
+        samples = random.sample(samples, min(n_per_class, len(samples)))
+ 
+        for col_idx, fname in enumerate(samples):
+            ax = fig.add_subplot(len(LABEL_COLS), n_per_class, row_idx * n_per_class + col_idx + 1)
+            img_path = os.path.join(image_dir, fname)
+            try:
+                img = Image.open(img_path).convert("RGB").resize((128, 128))
+                ax.imshow(img)
+            except Exception:
+                ax.set_facecolor("#ddd")
+                ax.text(0.5, 0.5, "N/A", ha="center", va="center", transform=ax.transAxes, fontsize=8, color="#999")
+            ax.axis("off")
+            if col_idx == 0:
+                ax.set_ylabel(CLASS_NAMES[col], fontsize=9, labelpad=6, rotation=0, ha="right", va="center")
+    plt.tight_layout()
