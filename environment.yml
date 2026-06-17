@@ -39,7 +39,13 @@ dependencies:
   - pip:
       - timm
       - boto3
+      - setuptools
       - haversine
       - dvc
+      - dvc[s3]
+      - streamlit
+      - pdf2image
+      - mlflow>=3.1
       - albumentations
       - transformers
+      - dvclive
