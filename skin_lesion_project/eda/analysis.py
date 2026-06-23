@@ -13,7 +13,7 @@ from tqdm import tqdm
 from skin_lesion_project.utils.eda_utils import LABEL_COLS, PALETTE, CLASS_NAMES
 
 
-def plot_class_distribution(data: pd.DataFrame):
+def plot_class_distribution(data: pd.DataFrame) -> Tuple:
     """Plots class distribution from the 'diagnosis' column."""
 
     counts = (data["diagnosis"].value_counts().reindex(LABEL_COLS, fill_value=0).rename(CLASS_NAMES))
