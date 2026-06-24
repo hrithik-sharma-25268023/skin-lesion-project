@@ -1,5 +1,7 @@
 """Image preprocessing and augmentation pipelines for skin lesion classification."""
 
+from PIL import Image
+import torch
 from torchvision import transforms
 
 def training_data_transforms() -> transforms.transforms.Compose:
@@ -28,6 +30,15 @@ def test_val_transforms() -> transforms.transforms.Compose:
 
     return eval_transform
 
-if __name__ == "__main__":
-    print(type(test_val_transforms()))
-    print(type(training_data_transforms()))
+
+def tensor_to_pil(image_tensor: torch.Tensor) -> Image.Image:
+    """Converts a normalized image tensor back to a PIL image for visualization."""
+
+    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+
+    image_tensor = image_tensor.detach().cpu()
+    image_tensor = image_tensor * std + mean
+    image_tensor = image_tensor.clamp(0, 1)
+
+    return transforms.ToPILImage()(image_tensor)

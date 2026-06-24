@@ -35,6 +35,7 @@ setup(
             "pytest",
             "black",
             "flake8",
+            "tomli"
         ]
     },
 
