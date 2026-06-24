@@ -25,6 +25,10 @@ jobs:
     - name: Install Dependencies
       run: |
         conda env create --file environment.yml
+    
+    - name: Activating the Environment
+      run: |
+        conda activate skin-lesion-project
 
     - name: Run Tests
       run: |
