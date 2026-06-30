@@ -21,11 +21,9 @@ setup(
         "seaborn",
         "tqdm",
         "PyYAML",
-        "ipykernel",
         "timm",
         "boto3",
         "haversine",
-        "dvc",
         "albumentations",
         "transformers",
     ],
@@ -35,7 +33,7 @@ setup(
             "pytest",
             "black",
             "flake8",
-            "tomli"
+            "tomli",
         ]
     },
 

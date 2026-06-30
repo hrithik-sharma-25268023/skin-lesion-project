@@ -33,18 +33,15 @@ dependencies:
   - tqdm
   - pyyaml
   - ipykernel
-
-  # Required for pytest on Python 3.10
   - tomli
-
+  - pytest=8.4.*
   - pip
+
   - pip:
       - timm
       - boto3
-      - setuptools
       - haversine
       - pdf2image
       - "mlflow>=3.1"
-      - "pytest<9"
       - albumentations
       - transformers
