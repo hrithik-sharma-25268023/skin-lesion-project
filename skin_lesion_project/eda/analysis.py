@@ -1,8 +1,9 @@
 """module for Exploratory Data Analysis of the Dataset"""
 
+from collections import Counter
 import os
 import random
-from typing import Tuple
+from typing import Tuple, Dict
 
 from matplotlib import pyplot as plt
 import numpy as np
@@ -159,5 +160,81 @@ def plot_pixel_stats(data: pd.DataFrame, image_dir: str, n_samples: int = 500) -
         axes[ch_idx].set_ylim(0, 255)
         axes[ch_idx].tick_params(axis="x", rotation=35)
         axes[ch_idx].set_ylabel("Pixel intensity (0–255)")
+
+    plt.tight_layout()
+
+
+def mapping_to_dataframe(mappings: Dict[str, str]) -> pd.DataFrame:
+    """Converts image-label dictionary into a pandas DataFrame."""
+
+    return pd.DataFrame(mappings.items(), columns=["image", "label"])
+
+
+def dataset_summary(data: pd.DataFrame) -> None:
+    """Prints dataset summary."""
+
+    print(f"Total Images : {len(data):,}")
+    print(f"Unique Images: {data['image'].nunique():,}")
+    print(f"Classes      : {data['label'].nunique()}")
+
+    print("\nClass Counts")
+    print(data["label"].value_counts())
+
+
+def plot_class_distribution_(data: pd.DataFrame):
+    """Plot bar chart and pie chart of class distribution."""
+
+    counts = Counter(data["label"])
+    counts = (pd.Series(counts).rename(index=CLASS_NAMES).sort_values(ascending=False))
+    percentages = (counts / counts.sum() * 100).round(1)
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    fig.suptitle("Class Distribution", fontsize=16, fontweight="bold")
+    bars = axes[0].bar(counts.index, counts.values, color=PALETTE[: len(counts)], edgecolor="white", linewidth=0.8)
+    axes[0].set_title("Absolute Count per Class")
+    axes[0].set_ylabel("Number of Images")
+    axes[0].tick_params(axis="x", rotation=35)
+
+    for bar, value in zip(bars, counts.values):
+        axes[0].text(bar.get_x() + bar.get_width() / 2, value + max(counts) * 0.005, str(value), ha="center", fontsize=9)
+
+    wedges, _ = axes[1].pie(counts.values, colors=PALETTE[: len(counts)], startangle=140, wedgeprops={"edgecolor": "white", "linewidth": 1.2})
+    legend_labels = [f"{label} ({pct:.1f}%)" for label, pct in zip(counts.index, percentages)]
+    axes[1].legend(wedges, legend_labels, title="Classes", loc="center left", bbox_to_anchor=(1, 0.5))
+    axes[1].set_title("Proportion per Class")
+    plt.tight_layout()
+    return counts, percentages
+
+
+def plot_sample_grid_(data: pd.DataFrame, image_dir: str, n_per_class: int = 5):
+    """Display random sample images from each class."""
+
+    classes = sorted(data["label"].unique())
+    fig, axes = plt.subplots(len(classes), n_per_class, figsize=(n_per_class * 2.5, len(classes) * 2.8))
+
+    fig.suptitle("Sample Images per Class", fontsize=15, fontweight="bold", y=1.02)
+    if len(classes) == 1:
+        axes = [axes]
+    for row, cls in enumerate(classes):
+        images = data.loc[data["label"] == cls, "image"].tolist()
+        samples = random.sample(images, min(n_per_class, len(images)))
+        for col in range(n_per_class):
+            ax = axes[row][col]
+            if col >= len(samples):
+                ax.axis("off")
+                continue
+            image_path = os.path.join(image_dir, samples[col])
+            try:
+                image = (Image.open(image_path).convert("RGB").resize((128, 128)))
+                ax.imshow(image)
+            except Exception:
+                ax.set_facecolor("#DDDDDD")
+                ax.text(0.5, 0.5, "N/A", ha="center", va="center", transform=ax.transAxes)
+
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_xlabel(samples[col], fontsize=7)
+
+        axes[row][0].annotate(CLASS_NAMES.get(cls, cls), xy=(-0.45, 0.5), xycoords="axes fraction",
+                              fontsize=10, fontweight="bold", ha="right", va="center")
 
     plt.tight_layout()
