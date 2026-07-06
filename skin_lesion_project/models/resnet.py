@@ -100,10 +100,7 @@ class ResNet50(nn.Module):
         print("=" * 60)
 
 
-def get_resnet50(
-    num_classes: int = 8,
-    pretrained: bool = True,
-) -> ResNet50:
+def get_resnet50(num_classes: int = 8, pretrained: bool = True) -> ResNet50:
     """
     Returns a ResNet-50 model.
 
@@ -120,7 +117,4 @@ def get_resnet50(
     ResNet50
     """
 
-    return ResNet50(
-        num_classes=num_classes,
-        pretrained=pretrained,
-    )
+    return ResNet50(num_classes=num_classes, pretrained=pretrained)
