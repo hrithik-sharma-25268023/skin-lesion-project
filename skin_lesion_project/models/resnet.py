@@ -1,190 +1,126 @@
-"""LeNet-5 implementation for multi-class skin lesion classification."""
+"""
+ResNet-50 model for skin lesion classification.
+
+This module provides a ResNet-50 architecture with optional ImageNet
+pretrained weights. The final classification layer is replaced to
+support an arbitrary number of output classes.
+"""
 
 from __future__ import annotations
 
 import torch
 import torch.nn as nn
+from torchvision.models import ResNet50_Weights, resnet50
 
 
-class LeNet5(nn.Module):
+class ResNet50(nn.Module):
     """
-    LeNet-5 architecture.
+    ResNet-50 classifier.
 
     Parameters
     ----------
-    num_classes : int
+    num_classes : int, default=8
         Number of output classes.
-    in_channels : int
-        Number of image channels (default=3 for RGB).
-    input_size : int
-        Height/Width of the input image.
+
+    pretrained : bool, default=True
+        Whether to load ImageNet pretrained weights.
     """
 
-    def __init__(
-        self,
-        num_classes: int = 8,
-        in_channels: int = 3,
-        input_size: int = 224,
-    ) -> None:
+    def __init__(self, num_classes: int = 8, pretrained: bool = True) -> None:
+        """__init__ method"""
+
         super().__init__()
+        weights = (ResNet50_Weights.DEFAULT if pretrained else None)
+        self.backbone = resnet50(weights=weights)
+        in_features = self.backbone.fc.in_features
+        self.backbone.fc = nn.Linear(in_features, num_classes)
 
-        self.features = nn.Sequential(
-
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=6,
-                kernel_size=5,
-                stride=1,
-                padding=2,
-            ),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-
-            nn.Conv2d(
-                in_channels=6,
-                out_channels=16,
-                kernel_size=5,
-            ),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-        )
-
-        # Automatically determine flattened feature size
-        flattened_size = self._get_flattened_size(
-            in_channels,
-            input_size,
-        )
-
-        self.classifier = nn.Sequential(
-
-            nn.Linear(flattened_size, 120),
-            nn.ReLU(inplace=True),
-
-            nn.Linear(120, 84),
-            nn.ReLU(inplace=True),
-
-            nn.Linear(84, num_classes),
-        )
-
-        self._initialize_weights()
-
-    def _get_flattened_size(
-        self,
-        in_channels: int,
-        input_size: int,
-    ) -> int:
-        """
-        Computes the flattened feature dimension automatically.
-        """
-
-        with torch.no_grad():
-
-            x = torch.zeros(
-                1,
-                in_channels,
-                input_size,
-                input_size,
-            )
-
-            x = self.features(x)
-
-            return x.view(1, -1).size(1)
-
-    def _initialize_weights(self) -> None:
-        """
-        Initializes model weights using Kaiming initialization.
-        """
-
-        for module in self.modules():
-
-            if isinstance(module, nn.Conv2d):
-
-                nn.init.kaiming_normal_(
-                    module.weight,
-                    mode="fan_out",
-                    nonlinearity="relu",
-                )
-
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-
-            elif isinstance(module, nn.Linear):
-
-                nn.init.kaiming_normal_(
-                    module.weight,
-                    nonlinearity="relu",
-                )
-
-                nn.init.zeros_(module.bias)
-
-    def forward(
-        self,
-        x: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass.
 
         Parameters
         ----------
         x : torch.Tensor
-            Input tensor of shape
-            (batch_size, channels, height, width)
+            Input image tensor of shape
+            (batch_size, 3, 224, 224)
 
         Returns
         -------
         torch.Tensor
-            Raw logits.
+            Classification logits.
         """
 
-        x = self.features(x)
+        return self.backbone(x)
 
-        x = torch.flatten(x, start_dim=1)
+    def freeze_backbone(self) -> None:
+        """
+        Freeze all backbone layers except the classifier.
+        """
 
-        x = self.classifier(x)
+        for param in self.backbone.parameters():
+            param.requires_grad = False
 
-        return x
+        for param in self.backbone.fc.parameters():
+            param.requires_grad = True
+
+    def unfreeze_backbone(self) -> None:
+        """
+        Unfreeze the entire network.
+        """
+
+        for param in self.backbone.parameters():
+            param.requires_grad = True
+
+    @property
+    def feature_dimension(self) -> int:
+        """
+        Returns the feature dimension before classification.
+        """
+
+        return self.backbone.fc.in_features
+
+    def count_parameters(self) -> int:
+        """
+        Returns the total number of trainable parameters.
+        """
+
+        return sum(parameter.numel() for parameter in self.parameters() if parameter.requires_grad)
+
+    def summary(self) -> None:
+        """
+        Prints a simple model summary.
+        """
+
+        print("=" * 60)
+        print("Model            : ResNet-50")
+        print(f"Output Classes   : {self.backbone.fc.out_features}")
+        print(f"Feature Dimension: {self.feature_dimension}")
+        print(f"Trainable Params : {self.count_parameters():,}")
+        print("=" * 60)
 
 
-def lenet5(
+def get_resnet50(
     num_classes: int = 8,
-    in_channels: int = 3,
-    input_size: int = 224,
-) -> LeNet5:
+    pretrained: bool = True,
+) -> ResNet50:
     """
-    Factory function for LeNet-5.
+    Returns a ResNet-50 model.
 
     Parameters
     ----------
     num_classes : int
         Number of output classes.
 
-    in_channels : int
-        Number of input channels.
-
-    input_size : int
-        Input image size.
+    pretrained : bool
+        Whether to use ImageNet pretrained weights.
 
     Returns
     -------
-    LeNet5
+    ResNet50
     """
 
-    return LeNet5(
+    return ResNet50(
         num_classes=num_classes,
-        in_channels=in_channels,
-        input_size=input_size,
+        pretrained=pretrained,
     )
-
-
-if __name__ == "__main__":
-
-    model = lenet5()
-
-    x = torch.randn(2, 3, 224, 224)
-
-    y = model(x)
-
-    print(model)
-
-    print(f"Output Shape : {y.shape}")
-    
