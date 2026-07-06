@@ -124,12 +124,10 @@ class EfficientNetB3(nn.Module):
     def summary(self) -> None:
         """Print model summary."""
 
-        print("=" * 60)
         print("Model            : EfficientNet-B3")
         print(f"Output Classes   : {self.backbone.classifier[1].out_features}")
         print(f"Feature Dimension: {self.feature_dimension}")
         print(f"Trainable Params : {self.count_parameters():,}")
-        print("=" * 60)
 
 
 def get_efficientnet_b0(num_classes: int = 8, pretrained: bool = True) -> EfficientNetB0:

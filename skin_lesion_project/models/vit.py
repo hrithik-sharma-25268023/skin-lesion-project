@@ -1,20 +1,21 @@
 """
-ConvNeXt-Tiny model for skin lesion classification.
+Vision Transformer (ViT-B/16) model for skin lesion classification.
 
-This module provides a ConvNeXt-Tiny architecture with optional
-ImageNet pretrained weights.
+This module provides a Vision Transformer (ViT-B/16) architecture
+with optional ImageNet pretrained weights.
 """
 
 from __future__ import annotations
 
 import torch
 import torch.nn as nn
-from torchvision.models import ConvNeXt_Tiny_Weights, convnext_tiny
+
+from torchvision.models import ViT_B_16_Weights, vit_b_16
 
 
-class ConvNeXtTiny(nn.Module):
+class VisionTransformer(nn.Module):
     """
-    ConvNeXt-Tiny classifier.
+    Vision Transformer (ViT-B/16) classifier.
 
     Parameters
     ----------
@@ -22,16 +23,16 @@ class ConvNeXtTiny(nn.Module):
         Number of output classes.
 
     pretrained : bool, default=True
-        Whether to use ImageNet pretrained weights.
+        Whether to load ImageNet pretrained weights.
     """
 
     def __init__(self, num_classes: int = 8, pretrained: bool = True) -> None:
 
         super().__init__()
-        weights = (ConvNeXt_Tiny_Weights.DEFAULT if pretrained else None)
-        self.backbone = convnext_tiny(weights=weights)
-        in_features = self.backbone.classifier[2].in_features
-        self.backbone.classifier[2] = nn.Linear(in_features, num_classes)
+        weights = (ViT_B_16_Weights.DEFAULT if pretrained else None)
+        self.backbone = vit_b_16(weights=weights)
+        in_features = self.backbone.heads.head.in_features
+        self.backbone.heads.head = nn.Linear(in_features, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -53,18 +54,18 @@ class ConvNeXtTiny(nn.Module):
 
     def freeze_backbone(self) -> None:
         """
-        Freeze all backbone layers except classifier.
+        Freeze all backbone layers except classification head.
         """
 
         for parameter in self.backbone.parameters():
             parameter.requires_grad = False
 
-        for parameter in self.backbone.classifier.parameters():
+        for parameter in self.backbone.heads.parameters():
             parameter.requires_grad = True
 
     def unfreeze_backbone(self) -> None:
         """
-        Unfreeze the complete network.
+        Unfreeze the complete model.
         """
 
         for parameter in self.backbone.parameters():
@@ -76,29 +77,28 @@ class ConvNeXtTiny(nn.Module):
         Returns feature dimension before classification.
         """
 
-        return self.backbone.classifier[2].in_features
+        return self.backbone.heads.head.in_features
 
     def count_parameters(self) -> int:
         """
-        Returns the number of trainable parameters.
+        Returns number of trainable parameters.
         """
 
         return sum(parameter.numel() for parameter in self.parameters() if parameter.requires_grad)
 
     def summary(self) -> None:
         """
-        Prints a model summary.
+        Prints model summary.
         """
 
-        print("Model            : ConvNeXt-Tiny")
-        print(f"Output Classes   : {self.backbone.classifier[2].out_features}")
+        print("Model            : Vision Transformer (ViT-B/16)")
+        print(f"Output Classes   : {self.backbone.heads.head.out_features}")
         print(f"Feature Dimension: {self.feature_dimension}")
         print(f"Trainable Params : {self.count_parameters():,}")
 
-
-def get_convnext_tiny(num_classes: int = 8, pretrained: bool = True) -> ConvNeXtTiny:
+def get_vit_b16(num_classes: int = 8, pretrained: bool = True) -> VisionTransformer:
     """
-    Returns a ConvNeXt-Tiny model.
+    Returns a Vision Transformer (ViT-B/16).
 
     Parameters
     ----------
@@ -110,7 +110,7 @@ def get_convnext_tiny(num_classes: int = 8, pretrained: bool = True) -> ConvNeXt
 
     Returns
     -------
-    ConvNeXtTiny
+    VisionTransformer
     """
 
-    return ConvNeXtTiny(num_classes=num_classes, pretrained=pretrained)
+    return VisionTransformer(num_classes=num_classes, pretrained=pretrained)

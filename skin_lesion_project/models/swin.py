@@ -1,21 +1,24 @@
 """
-ResNet-50 model for skin lesion classification.
+Swin Transformer Tiny model for skin lesion classification.
 
-This module provides a ResNet-50 architecture with optional ImageNet
-pretrained weights. The final classification layer is replaced to
-support an arbitrary number of output classes.
+This module provides a Swin Transformer Tiny architecture with optional
+ImageNet pretrained weights.
 """
 
 from __future__ import annotations
 
 import torch
 import torch.nn as nn
-from torchvision.models import ResNet50_Weights, resnet50
+
+from torchvision.models import (
+    Swin_T_Weights,
+    swin_t,
+)
 
 
-class ResNet50(nn.Module):
+class SwinTransformer(nn.Module):
     """
-    ResNet-50 classifier.
+    Swin Transformer Tiny classifier.
 
     Parameters
     ----------
@@ -27,13 +30,13 @@ class ResNet50(nn.Module):
     """
 
     def __init__(self, num_classes: int = 8, pretrained: bool = True) -> None:
-        """__init__ method"""
 
         super().__init__()
-        weights = (ResNet50_Weights.DEFAULT if pretrained else None)
-        self.backbone = resnet50(weights=weights)
-        in_features = self.backbone.fc.in_features
-        self.backbone.fc = nn.Linear(in_features, num_classes)
+
+        weights = (Swin_T_Weights.DEFAULT if pretrained else None)
+        self.backbone = swin_t(weights=weights)
+        in_features = self.backbone.head.in_features
+        self.backbone.head = nn.Linear(in_features, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -42,7 +45,7 @@ class ResNet50(nn.Module):
         Parameters
         ----------
         x : torch.Tensor
-            Input image tensor of shape
+            Input tensor of shape
             (batch_size, 3, 224, 224)
 
         Returns
@@ -55,22 +58,22 @@ class ResNet50(nn.Module):
 
     def freeze_backbone(self) -> None:
         """
-        Freeze all backbone layers except the classifier.
+        Freeze all backbone layers except the classification head.
         """
 
-        for param in self.backbone.parameters():
-            param.requires_grad = False
+        for parameter in self.backbone.parameters():
+            parameter.requires_grad = False
 
-        for param in self.backbone.fc.parameters():
-            param.requires_grad = True
+        for parameter in self.backbone.head.parameters():
+            parameter.requires_grad = True
 
     def unfreeze_backbone(self) -> None:
         """
-        Unfreeze the entire network.
+        Unfreeze the complete model.
         """
 
-        for param in self.backbone.parameters():
-            param.requires_grad = True
+        for parameter in self.backbone.parameters():
+            parameter.requires_grad = True
 
     @property
     def feature_dimension(self) -> int:
@@ -78,11 +81,11 @@ class ResNet50(nn.Module):
         Returns the feature dimension before classification.
         """
 
-        return self.backbone.fc.in_features
+        return self.backbone.head.in_features
 
     def count_parameters(self) -> int:
         """
-        Returns the total number of trainable parameters.
+        Returns the number of trainable parameters.
         """
 
         return sum(parameter.numel() for parameter in self.parameters() if parameter.requires_grad)
@@ -92,15 +95,15 @@ class ResNet50(nn.Module):
         Prints a simple model summary.
         """
 
-        print("Model            : ResNet-50")
-        print(f"Output Classes   : {self.backbone.fc.out_features}")
+        print("Model            : Swin Transformer Tiny")
+        print(f"Output Classes   : {self.backbone.head.out_features}")
         print(f"Feature Dimension: {self.feature_dimension}")
         print(f"Trainable Params : {self.count_parameters():,}")
 
 
-def get_resnet50(num_classes: int = 8, pretrained: bool = True) -> ResNet50:
+def get_swin_t(num_classes: int = 8, pretrained: bool = True) -> SwinTransformer:
     """
-    Returns a ResNet-50 model.
+    Returns a Swin Transformer Tiny model.
 
     Parameters
     ----------
@@ -112,7 +115,7 @@ def get_resnet50(num_classes: int = 8, pretrained: bool = True) -> ResNet50:
 
     Returns
     -------
-    ResNet50
+    SwinTransformer
     """
 
-    return ResNet50(num_classes=num_classes, pretrained=pretrained)
+    return SwinTransformer(num_classes=num_classes, pretrained=pretrained)
