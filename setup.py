@@ -9,9 +9,9 @@ setup(
     python_requires=">=3.10",
 
     install_requires=[
-        "torch",
-        "torchvision",
-        "numpy",
+        "torch==2.4.1",
+        "torchvision==0.19.1",
+        "numpy<2",
         "pandas",
         "scikit-learn",
         "Pillow",
@@ -23,7 +23,6 @@ setup(
         "PyYAML",
         "timm",
         "boto3",
-        "haversine",
         "albumentations",
         "transformers",
     ],

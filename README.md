@@ -8,31 +8,13 @@ A modular deep learning package for multi-class skin lesion classification using
 
 This repository contains the core implementation of models, training pipelines, and evaluation utilities used for comparing CNN and Transformer architectures on dermoscopic image classification tasks.
 
-The design follows a modular and reusable structure, allowing seamless integration into experimental workflows.
-
----
-
 ## Features
 
 * CNN architectures (ResNet, EfficientNet)
 * Transformer-based models (Vision Transformer, Swin Transformer)
-* Unified training pipeline
 * Transfer learning support (ImageNet pretrained weights)
 * Evaluation metrics (Accuracy, F1-score, Balanced Accuracy, Precision, Recall, ROC-AUC)
 * Clean and extensible codebase
-
----
-
-## Project Structure
-
-```
-skin_lesion_project/
-├── models/            # CNN and Transformer architectures
-├── training/          # Training pipeline
-├── evaluation/        # Metrics and evaluation
-└── utils/             # Helper functions
-```
-
 ---
 
 ## Installation
@@ -50,15 +32,6 @@ Install as a package:
 python setup.py develop
 pip install -e .
 ```
-
----
-
-## Models Included
-
-* ResNet
-* EfficientNet
-* Vision Transformer (ViT)
-* Swin Transformer
 
 ---
 

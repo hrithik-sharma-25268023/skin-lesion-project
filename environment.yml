@@ -7,27 +7,23 @@ channels:
   - defaults
 
 dependencies:
+  # Python
   - python=3.10.8
 
-  # Core ML
-  - pytorch
-  - torchvision
-  - torchaudio
-  - pytorch-cuda=11.8
-
-  # Data
-  - numpy
+  # Scientific Computing
+  - numpy<2
   - pandas
   - scikit-learn
+  - scipy
 
-  # Images
+  # Image Processing
   - pillow
   - opencv
 
   # Visualization
   - matplotlib
-  - plotly
   - seaborn
+  - plotly
 
   # Utilities
   - tqdm
@@ -38,10 +34,11 @@ dependencies:
   - pip
 
   - pip:
-      - timm
+      - --extra-index-url https://download.pytorch.org/whl/cu118
+      - timm>=1.0
+      - torch==2.4.1
+      - torchvision==0.19.1
+      - albumentations>=2.0
+      - transformers>=4.45
+      - mlflow>=3.1
       - boto3
-      - haversine
-      - pdf2image
-      - "mlflow>=3.1"
-      - albumentations
-      - transformers
