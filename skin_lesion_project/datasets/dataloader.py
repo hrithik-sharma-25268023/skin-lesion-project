@@ -1,25 +1,28 @@
 """
-PyTorch Dataset and DataLoader utilities for skin lesion classification.
+PyTorch Dataset and DataLoader utilities for Skin Lesion Classification.
 """
 
 from __future__ import annotations
 
+import os
 import pickle
-from collections import Counter
+import random
 from pathlib import Path
+from collections import Counter
 from typing import Callable
 
 import torch
 from PIL import Image
 from torch.utils.data import (
-    DataLoader,
     Dataset,
+    DataLoader,
     WeightedRandomSampler,
+    Subset,
 )
 
-# ---------------------------------------------------------------------
-# Label mapping
-# ---------------------------------------------------------------------
+# ============================================================
+# Label Mapping
+# ============================================================
 
 CLASS_TO_IDX = {
     "MEL": 0,
@@ -35,10 +38,9 @@ CLASS_TO_IDX = {
 IDX_TO_CLASS = {v: k for k, v in CLASS_TO_IDX.items()}
 
 
-# ---------------------------------------------------------------------
+# ============================================================
 # Dataset
-# ---------------------------------------------------------------------
-
+# ============================================================
 
 class SkinLesionDataset(Dataset):
 
@@ -55,11 +57,15 @@ class SkinLesionDataset(Dataset):
         with open(label_file, "rb") as f:
             raw_labels = pickle.load(f)
 
-        # Convert labels ONCE
-        self.labels = {
-            image: CLASS_TO_IDX[label]
-            for image, label in raw_labels.items()
-        }
+        self.labels = {}
+
+        for image, label in raw_labels.items():
+
+            # Handle test pickle without extension
+            if not image.lower().endswith(".jpg"):
+                image += ".jpg"
+
+            self.labels[image] = CLASS_TO_IDX[label]
 
         self.images = sorted(self.labels.keys())
 
@@ -71,143 +77,225 @@ class SkinLesionDataset(Dataset):
 
         image_name = self.images[index]
 
-        image = Image.open(
-            self.image_dir / image_name
-        ).convert("RGB")
+        image_path = self.image_dir / image_name
 
-        if self.transform is not None:
-            image = self.transform(image)
+        if not image_path.exists():
+
+            raise FileNotFoundError(
+                f"Image not found:\n{image_path}"
+            )
+
+        image = Image.open(image_path).convert("RGB")
 
         label = self.labels[image_name]
+
+        if self.transform:
+            image = self.transform(image)
 
         return image, label
 
 
-# ---------------------------------------------------------------------
-# Class weights
-# ---------------------------------------------------------------------
-
+# ============================================================
+# Class Weights
+# ============================================================
 
 def compute_class_weights(dataset):
 
-    labels = list(dataset.labels.values())
+    if isinstance(dataset, Subset):
+
+        labels = [
+            dataset.dataset.labels[
+                dataset.dataset.images[idx]
+            ]
+            for idx in dataset.indices
+        ]
+
+    else:
+
+        labels = list(dataset.labels.values())
 
     counts = Counter(labels)
 
-    print("\nCounts:", counts)
+    total = len(labels)
 
     num_classes = len(CLASS_TO_IDX)
 
-    total = len(labels)
-
-    weights = []
-
-    for cls in range(num_classes):
-
-        count = counts.get(cls, 0)
-
-        if count == 0:
-            raise ValueError(
-                f"Class {cls} has zero samples in the training set."
-            )
-
-        weights.append(
-            total / (num_classes * count)
-        )
-
-    weights = torch.tensor(
-        weights,
+    weights = torch.zeros(
+        num_classes,
         dtype=torch.float32,
     )
 
-    print("\nClass Weights")
+    for cls in range(num_classes):
 
-    for cls, weight in enumerate(weights):
+        if counts.get(cls, 0) > 0:
 
-        print(
-            f"{IDX_TO_CLASS[cls]} : {weight:.3f}"
-        )
+            weights[cls] = (
+                total /
+                (num_classes * counts[cls])
+            )
+
+        else:
+
+            print(
+                f"Warning: {IDX_TO_CLASS[cls]} "
+                f"not present in current subset."
+            )
+
+            weights[cls] = 0.0
 
     return weights
 
 
-# ---------------------------------------------------------------------
-# Sampler
-# ---------------------------------------------------------------------
-
+# ============================================================
+# Weighted Sampler
+# ============================================================
 
 def create_weighted_sampler(
     dataset,
     class_weights,
 ):
 
-    sample_weights = [
-        class_weights[label].item()
-        for label in dataset.labels.values()
-    ]
+    if isinstance(dataset, Subset):
+
+        sample_weights = [
+
+            class_weights[
+                dataset.dataset.labels[
+                    dataset.dataset.images[idx]
+                ]
+            ].item()
+
+            for idx in dataset.indices
+
+        ]
+
+    else:
+
+        sample_weights = [
+
+            class_weights[label].item()
+
+            for label in dataset.labels.values()
+
+        ]
 
     return WeightedRandomSampler(
+
         sample_weights,
-        len(sample_weights),
+
+        num_samples=len(sample_weights),
+
         replacement=True,
     )
 
 
-# ---------------------------------------------------------------------
-# Dataloader
-# ---------------------------------------------------------------------
-
+# ============================================================
+# DataLoader
+# ============================================================
 
 def create_dataloader(
     dataset,
-    batch_size=32,
+    batch_size=8,
     shuffle=False,
     sampler=None,
-    num_workers=4,
 ):
 
+    workers = min(4, os.cpu_count())
+
     return DataLoader(
+
         dataset,
+
         batch_size=batch_size,
-        shuffle=False if sampler else shuffle,
+
+        shuffle=shuffle if sampler is None else False,
+
         sampler=sampler,
-        num_workers=num_workers,
+
+        num_workers=workers,
+
         pin_memory=torch.cuda.is_available(),
+
+        persistent_workers=workers > 0,
+
+        prefetch_factor=2 if workers > 0 else None,
     )
 
 
-# ---------------------------------------------------------------------
+# ============================================================
 # Factory
-# ---------------------------------------------------------------------
-
+# ============================================================
 
 def create_dataloaders(
+
     train_image_dir,
+
     train_label_file,
+
     val_image_dir,
+
     val_label_file,
+
     train_transform,
+
     val_transform,
-    batch_size=32,
-    num_workers=4,
+
+    batch_size=8,
+
+    subset_fraction=1.0,
 ):
 
     train_dataset = SkinLesionDataset(
+
         train_image_dir,
+
         train_label_file,
+
         train_transform,
     )
 
     val_dataset = SkinLesionDataset(
+
         val_image_dir,
+
         val_label_file,
+
         val_transform,
     )
 
-    print("\nExample label:", train_dataset[0][1])
+    # --------------------------------------------------------
+
+    # Random subset for debugging
+
+    # --------------------------------------------------------
+
+    if subset_fraction < 1.0:
+
+        subset_size = int(
+            len(train_dataset) * subset_fraction
+        )
+
+        random.seed(42)
+
+        indices = random.sample(
+            range(len(train_dataset)),
+            subset_size,
+        )
+
+        train_dataset = Subset(
+            train_dataset,
+            indices,
+        )
+
+        print(
+            f"\nUsing {subset_size} training images "
+            f"({subset_fraction*100:.0f}% of dataset)"
+        )
+
+    # --------------------------------------------------------
 
     class_weights = compute_class_weights(
-        train_dataset
+        train_dataset,
     )
 
     sampler = create_weighted_sampler(
@@ -216,18 +304,27 @@ def create_dataloaders(
     )
 
     train_loader = create_dataloader(
+
         train_dataset,
+
         batch_size=batch_size,
+
         sampler=sampler,
-        num_workers=num_workers,
     )
 
     val_loader = create_dataloader(
+
         val_dataset,
+
         batch_size=batch_size,
+
         shuffle=False,
-        num_workers=num_workers,
     )
+
+    print(f"Training Images   : {len(train_dataset)}")
+    print(f"Validation Images : {len(val_dataset)}")
+    print(f"Batch Size        : {batch_size}")
+    print(f"Workers           : {min(4, os.cpu_count())}")
 
     return (
         train_loader,
