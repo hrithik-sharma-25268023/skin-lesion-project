@@ -16,7 +16,8 @@ from tqdm import tqdm
 def train(model: nn.Module, train_loader, val_loader,
           criterion: nn.Module, optimizer: torch.optim.Optimizer, scheduler=None,
           device: torch.device = torch.device("cpu"), epochs: int = 50,
-          checkpoint_path: str = "checkpoints/best_model.pt"):
+          checkpoint_path: str = "checkpoints/best_model.pt",
+          early_stopping_patience: int | None = None):
     """
     Train a classification model.
 
@@ -31,6 +32,9 @@ def train(model: nn.Module, train_loader, val_loader,
     device : torch.device
     epochs : int
     checkpoint_path : str
+    early_stopping_patience : int, optional
+        Number of epochs with no improvement in macro F1 before stopping early.
+        If None, training runs for the full number of epochs.
 
     Returns
     -------
@@ -45,6 +49,8 @@ def train(model: nn.Module, train_loader, val_loader,
     history = {"train_loss": [], "val_loss": [],
         "train_accuracy": [], "val_accuracy": [], "precision": [], "recall": [], "macro_f1": []}
     best_macro_f1 = 0.0
+    epochs_no_improve = 0
+
     for epoch in range(epochs):
         model.train()
         train_loss = 0.0
@@ -98,8 +104,11 @@ def train(model: nn.Module, train_loader, val_loader,
 
         if macro_f1 > best_macro_f1:
             best_macro_f1 = macro_f1
+            epochs_no_improve = 0
             torch.save(model.state_dict(), checkpoint_path)
             print("Best model saved.")
+        else:
+            epochs_no_improve += 1
 
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
@@ -120,6 +129,11 @@ def train(model: nn.Module, train_loader, val_loader,
         print(f"Precision  : {precision}")
         print(f"Recall     : {recall}")
         print(f"Macro F1   : {macro_f1}")
+
+        if early_stopping_patience is not None and epochs_no_improve >= early_stopping_patience:
+            print(f"\nEarly stopping triggered at epoch {epoch+1}/{epochs} "
+                  f"(no improvement in Macro F1 for {early_stopping_patience} epochs)")
+            break
 
     print(f"Best Validation Macro F1 : {best_macro_f1}")
     return history

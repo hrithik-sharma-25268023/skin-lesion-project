@@ -109,7 +109,7 @@ def create_weighted_sampler(dataset, class_weights):
 
 def create_dataloader(dataset, batch_size=8, shuffle=False, sampler=None):
 
-    workers = min(4, os.cpu_count())
+    workers = min(16, os.cpu_count())
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -177,6 +177,6 @@ def create_dataloaders(train_transform, val_transform, batch_size=8, subset_frac
     print(f"Training Images   : {len(train_dataset)}")
     print(f"Validation Images : {len(val_dataset)}")
     print(f"Batch Size        : {batch_size}")
-    print(f"Workers           : {min(4, os.cpu_count())}")
+    print(f"Workers           : {min(16, os.cpu_count())}")
 
     return (train_loader, val_loader, class_weights)
