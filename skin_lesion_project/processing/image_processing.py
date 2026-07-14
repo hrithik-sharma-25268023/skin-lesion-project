@@ -11,7 +11,7 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 def training_data_transforms():
 
     return transforms.Compose([
-        transforms.Resize((100, 100)),
+        transforms.Resize((224, 224)),
         transforms.RandomHorizontalFlip(),
         transforms.RandomVerticalFlip(p=0.3),
         transforms.RandomRotation(10),
@@ -23,7 +23,7 @@ def training_data_transforms():
 def test_val_transforms():
 
     return transforms.Compose([
-        transforms.Resize((100,100)),
+        transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
 

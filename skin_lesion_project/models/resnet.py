@@ -68,9 +68,21 @@ class ResNet50(nn.Module):
         """
         Unfreeze the entire network.
         """
-
         for param in self.backbone.parameters():
             param.requires_grad = True
+
+    def unfreeze_last_block(self) -> None:
+        """
+        Unfreeze only the last ResNet block (layer4) and the classifier head,
+        keeping earlier layers (layer1-3, conv1, bn1) frozen.
+        """
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+        for param in self.backbone.layer4.parameters():
+            param.requires_grad = True
+        for param in self.backbone.fc.parameters():
+            param.requires_grad = True
+
 
     @property
     def feature_dimension(self) -> int:
