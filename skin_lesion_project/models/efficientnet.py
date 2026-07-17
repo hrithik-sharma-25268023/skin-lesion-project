@@ -51,6 +51,18 @@ class EfficientNetB0(nn.Module):
         for parameter in self.backbone.parameters():
             parameter.requires_grad = True
 
+    def unfreeze_last_block(self) -> None:
+        """Unfreeze only the last MBConv block and classifier, keep earlier layers frozen."""
+
+        for parameter in self.backbone.parameters():
+            parameter.requires_grad = False
+
+        for parameter in self.backbone.features[-1].parameters():
+            parameter.requires_grad = True
+
+        for parameter in self.backbone.classifier.parameters():
+            parameter.requires_grad = True
+
     @property
     def feature_dimension(self) -> int:
         """Returns feature dimension before classification."""
@@ -109,6 +121,18 @@ class EfficientNetB3(nn.Module):
         """Unfreeze the complete network."""
 
         for parameter in self.backbone.parameters():
+            parameter.requires_grad = True
+
+    def unfreeze_last_block(self) -> None:
+        """Unfreeze only the last MBConv block and classifier, keep earlier layers frozen."""
+
+        for parameter in self.backbone.parameters():
+            parameter.requires_grad = False
+
+        for parameter in self.backbone.features[-1].parameters():
+            parameter.requires_grad = True
+
+        for parameter in self.backbone.classifier.parameters():
             parameter.requires_grad = True
 
     @property
