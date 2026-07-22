@@ -11,7 +11,7 @@ import random
 from pathlib import Path
 from collections import Counter
 from typing import Callable
-
+from collections import defaultdict
 import boto3
 import torch
 from PIL import Image
@@ -21,6 +21,37 @@ CLASS_TO_IDX = {"MEL": 0, "NV": 1, "BCC": 2, "AK": 3,
                 "BKL": 4, "DF": 5, "VASC": 6, "SCC": 7}
 
 IDX_TO_CLASS = {v: k for k, v in CLASS_TO_IDX.items()}
+
+
+def downsample_dataset(dataset, max_samples_per_class, random_seed=42):
+    """Downsample majority classes while keeping minority classes unchanged."""
+
+    random.seed(random_seed)
+    class_indices = defaultdict(list)
+    for idx, (_, label) in enumerate(dataset.samples):
+        class_indices[label].append(idx)
+    print("\nOriginal Training Distribution")
+    for cls in sorted(class_indices.keys()):
+        print(f"{cls:<5}: {len(class_indices[cls])}")
+    selected_indices = []
+    for cls, indices in class_indices.items():
+        max_keep = max_samples_per_class.get(cls, len(indices))
+        if len(indices) > max_keep:
+            indices = random.sample(indices, max_keep)
+        selected_indices.extend(indices)
+    random.shuffle(selected_indices)
+    subset = Subset(dataset, selected_indices)
+    print("Balanced Training Distribution")
+    balanced = defaultdict(int)
+    for idx in selected_indices:
+        _, label = dataset.samples[idx]
+        balanced[label] += 1
+
+    for cls in sorted(balanced.keys()):
+        print(f"{cls:<5}: {balanced[cls]}")
+    print(f"\nTotal Images: {len(selected_indices)}")
+    return subset
+
 
 class SkinLesionDataset(Dataset):
 
@@ -120,63 +151,88 @@ def create_dataloader(dataset, batch_size=8, shuffle=False, sampler=None):
         persistent_workers=workers > 0, prefetch_factor=2 if workers > 0 else None)
 
 
-def create_dataloaders(train_transform, val_transform, batch_size=8, subset_fraction=1.0,
-                        train_image_dir=None, train_label_file=None,
-                        val_image_dir=None, val_label_file=None,
-                        bucket_name=None,
-                        train_image_prefix=None, train_label_key=None,
-                        val_image_prefix=None, val_label_key=None):
+def create_dataloaders(
+    train_transform,
+    val_transform,
+    batch_size=8,
+    subset_fraction=1.0,
+    downsample_classes=None,
+    use_weighted_sampler=True,
+    train_image_dir=None,
+    train_label_file=None,
+    val_image_dir=None,
+    val_label_file=None,
+    bucket_name=None,
+    train_image_prefix=None,
+    train_label_key=None,
+    val_image_prefix=None,
+    val_label_key=None):
 
     storage_type = "s3" if bucket_name is not None else "local"
-
     if storage_type == "local":
         train_dataset = SkinLesionDataset(
             storage_type="local",
             image_dir=train_image_dir,
             label_file=train_label_file,
-            transform=train_transform,
+            transform=train_transform
         )
+
         val_dataset = SkinLesionDataset(
             storage_type="local",
             image_dir=val_image_dir,
             label_file=val_label_file,
-            transform=val_transform,
+            transform=val_transform
         )
+
     else:
         train_dataset = SkinLesionDataset(
             storage_type="s3",
             bucket_name=bucket_name,
             image_prefix=train_image_prefix,
             label_key=train_label_key,
-            transform=train_transform,
+            transform=train_transform
         )
+
         val_dataset = SkinLesionDataset(
             storage_type="s3",
             bucket_name=bucket_name,
             image_prefix=val_image_prefix,
             label_key=val_label_key,
-            transform=val_transform,
-        )
+            transform=val_transform)
 
     if subset_fraction < 1.0:
         subset_size = int(len(train_dataset) * subset_fraction)
         random.seed(42)
         indices = random.sample(range(len(train_dataset)), subset_size)
-        train_dataset = Subset(train_dataset, indices)
 
+        train_dataset = Subset(train_dataset, indices)
         print(
             f"\nUsing {subset_size} training images "
-            f"({subset_fraction*100:.0f}% of dataset)"
+            f"({subset_fraction * 100:.0f}% of dataset)"
         )
-
+    if downsample_classes is not None:
+        if isinstance(train_dataset, Subset):
+            raise ValueError(
+                "Use either subset_fraction or "
+                "downsample_classes, not both."
+            )
+        train_dataset = downsample_dataset(train_dataset, downsample_classes)
     class_weights = compute_class_weights(train_dataset)
-    sampler = create_weighted_sampler(train_dataset, class_weights)
-    train_loader = create_dataloader(train_dataset, batch_size=batch_size, sampler=sampler)
+    if use_weighted_sampler:
+        sampler = create_weighted_sampler(train_dataset, class_weights)
+        shuffle = False
+    else:
+        sampler = None
+        shuffle = True
+    train_loader = create_dataloader(train_dataset, batch_size=batch_size, sampler=sampler, shuffle=shuffle)
     val_loader = create_dataloader(val_dataset, batch_size=batch_size, shuffle=False)
-
     print(f"Training Images   : {len(train_dataset)}")
     print(f"Validation Images : {len(val_dataset)}")
     print(f"Batch Size        : {batch_size}")
     print(f"Workers           : {min(16, os.cpu_count())}")
-
-    return (train_loader, val_loader, class_weights)
+    print(f"Weighted Sampler  : {use_weighted_sampler}")
+    if downsample_classes is not None:
+        print(f"Downsampling      : Enabled")
+    else:
+        print(f"Downsampling      : Disabled")
+    return train_loader, val_loader, class_weights
