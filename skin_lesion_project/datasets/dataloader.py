@@ -9,9 +9,9 @@ import os
 import pickle
 import random
 from pathlib import Path
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import Callable
-from collections import defaultdict
+
 import boto3
 import torch
 from PIL import Image
@@ -24,33 +24,44 @@ IDX_TO_CLASS = {v: k for k, v in CLASS_TO_IDX.items()}
 
 
 def downsample_dataset(dataset, max_samples_per_class, random_seed=42):
-    """Downsample majority classes while keeping minority classes unchanged."""
+    """
+    Downsample majority classes while keeping minority classes unchanged.
+
+    Parameters
+    ----------
+    dataset : SkinLesionDataset
+    max_samples_per_class : dict
+    """
 
     random.seed(random_seed)
     class_indices = defaultdict(list)
-    for idx, (_, label) in enumerate(dataset.samples):
+
+    for idx, image_name in enumerate(dataset.images):
+        label = dataset.labels[image_name]
         class_indices[label].append(idx)
     print("\nOriginal Training Distribution")
-    for cls in sorted(class_indices.keys()):
-        print(f"{cls:<5}: {len(class_indices[cls])}")
+    for cls in sorted(class_indices):
+        print(f"{IDX_TO_CLASS[cls]:<5}: {len(class_indices[cls])}")
     selected_indices = []
     for cls, indices in class_indices.items():
-        max_keep = max_samples_per_class.get(cls, len(indices))
+        class_name = IDX_TO_CLASS[cls]
+        max_keep = max_samples_per_class.get(class_name, len(indices))
         if len(indices) > max_keep:
             indices = random.sample(indices, max_keep)
         selected_indices.extend(indices)
     random.shuffle(selected_indices)
-    subset = Subset(dataset, selected_indices)
-    print("Balanced Training Distribution")
+    print("\nBalanced Training Distribution")
     balanced = defaultdict(int)
+
     for idx in selected_indices:
-        _, label = dataset.samples[idx]
+        image_name = dataset.images[idx]
+        label = dataset.labels[image_name]
         balanced[label] += 1
 
-    for cls in sorted(balanced.keys()):
-        print(f"{cls:<5}: {balanced[cls]}")
-    print(f"\nTotal Images: {len(selected_indices)}")
-    return subset
+    for cls in sorted(balanced):
+        print(f"{IDX_TO_CLASS[cls]:<5}: {balanced[cls]}")
+    print(f"\nTraining Images : {len(selected_indices)}")
+    return Subset(dataset, selected_indices)
 
 
 class SkinLesionDataset(Dataset):
@@ -58,25 +69,22 @@ class SkinLesionDataset(Dataset):
     def __init__(self, storage_type="local", image_dir=None, label_file=None,
                  bucket_name=None, image_prefix=None,
                  label_key=None, transform=None):
-    
+
         self.storage_type = storage_type
         self.transform = transform
         if storage_type == "local":
             self.image_dir = Path(image_dir)
-
         else:
             self.bucket = bucket_name
             self.image_prefix = image_prefix
-            self.s3 = boto3.client("s3")   
-        
+            self.s3 = boto3.client("s3")
+
         if self.storage_type == "local":
             with open(label_file, "rb") as f:
                 raw_labels = pickle.load(f)
         else:
-            response = self.s3.get_object(Bucket=self.bucket,
-                                          Key=label_key)
+            response = self.s3.get_object(Bucket=self.bucket, Key=label_key)
             raw_labels = pickle.loads(response["Body"].read())
-        
 
         self.labels = {}
 
@@ -121,9 +129,7 @@ def compute_class_weights(dataset):
         if counts.get(cls, 0) > 0:
             weights[cls] = (total / (num_classes * counts[cls]))
         else:
-            print(
-                f"Warning: {IDX_TO_CLASS[cls]} "
-                f"not present in current subset.")
+            print(f"Warning: {IDX_TO_CLASS[cls]} not present in current subset.")
             weights[cls] = 0.0
     return weights
 
@@ -132,7 +138,9 @@ def create_weighted_sampler(dataset, class_weights):
 
     if isinstance(dataset, Subset):
         sample_weights = [
-            class_weights[dataset.dataset.labels[dataset.dataset.images[idx]]].item() for idx in dataset.indices]
+            class_weights[dataset.dataset.labels[dataset.dataset.images[idx]]].item()
+            for idx in dataset.indices
+        ]
     else:
         sample_weights = [class_weights[label].item() for label in dataset.labels.values()]
     return WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
@@ -148,7 +156,10 @@ def create_dataloader(dataset, batch_size=8, shuffle=False, sampler=None):
         sampler=sampler,
         num_workers=workers,
         pin_memory=torch.cuda.is_available(),
-        persistent_workers=workers > 0, prefetch_factor=2 if workers > 0 else None)
+        persistent_workers=workers > 0,
+        prefetch_factor=2 if workers > 0 else None,
+        drop_last=shuffle,  # avoids a lone tiny batch (bad for BatchNorm / MixUp) during training
+    )
 
 
 def create_dataloaders(
@@ -206,17 +217,13 @@ def create_dataloaders(
         indices = random.sample(range(len(train_dataset)), subset_size)
 
         train_dataset = Subset(train_dataset, indices)
-        print(
-            f"\nUsing {subset_size} training images "
-            f"({subset_fraction * 100:.0f}% of dataset)"
-        )
+        print(f"\nUsing {subset_size} training images ({subset_fraction * 100:.0f}% of dataset)")
+
     if downsample_classes is not None:
         if isinstance(train_dataset, Subset):
-            raise ValueError(
-                "Use either subset_fraction or "
-                "downsample_classes, not both."
-            )
+            raise ValueError("Use either subset_fraction or downsample_classes, not both.")
         train_dataset = downsample_dataset(train_dataset, downsample_classes)
+
     class_weights = compute_class_weights(train_dataset)
     if use_weighted_sampler:
         sampler = create_weighted_sampler(train_dataset, class_weights)
@@ -231,8 +238,5 @@ def create_dataloaders(
     print(f"Batch Size        : {batch_size}")
     print(f"Workers           : {min(16, os.cpu_count())}")
     print(f"Weighted Sampler  : {use_weighted_sampler}")
-    if downsample_classes is not None:
-        print(f"Downsampling      : Enabled")
-    else:
-        print(f"Downsampling      : Disabled")
+    print(f"Downsampling      : {'Enabled' if downsample_classes is not None else 'Disabled'}")
     return train_loader, val_loader, class_weights
