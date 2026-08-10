@@ -37,6 +37,12 @@ python setup.py develop
 pip install -e .
 ```
 
+Run the app
+
+```bash
+python streamlit run serve.py
+```
+
 ---
 
 ## Objective
