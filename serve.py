@@ -28,7 +28,7 @@ BUCKET = "s3://skin-lesion-data-bucket"
 RESULTS_PREFIX = "s3://skin-lesion-data-bucket/diagnosis"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# img_size is pinned per model, the binary and benign checkpoints don't record it,
+# img_size is pinned per model — the binary and benign checkpoints don't record it,
 # and a wrong size degrades accuracy silently instead of raising.
 BINARY_MODELS = {
     "Swin-T": {
@@ -105,7 +105,12 @@ def load_branch(name):
 
 def save_json(s3_path, payload):
     u = urlparse(s3_path)
-    boto3.client("s3").put_object(Bucket=u.netloc, Key=u.path.lstrip("/"), Body=json.dumps(payload, indent=2).encode(), ContentType="application/json")
+    boto3.client("s3").put_object(
+        Bucket=u.netloc,
+        Key=u.path.lstrip("/"),
+        Body=json.dumps(payload, indent=2).encode(),
+        ContentType="application/json",
+    )
 
 
 @torch.inference_mode()
@@ -160,6 +165,9 @@ with col1:
 
 bcfg = BINARY_MODELS[binary_name]
 
+# Clear stale results whenever the inputs behind them change: a new file, a
+# different stage 1 model, or TTA toggled. Streamlit reruns on any of these, and
+# only one widget can change per rerun, so this never eats a fresh button press.
 sig = (f.file_id if f else None, binary_name, use_tta)
 if st.session_state.get("sig") != sig:
     st.session_state.sig = sig
@@ -211,7 +219,8 @@ with col2:
                           for c, v in pairs]),
             hide_index=True, use_container_width=True,
             column_config={"Probability": st.column_config.ProgressColumn(
-                "Probability", format="%.3f", min_value=0.0, max_value=1.0)})
+                "Probability", format="%.3f", min_value=0.0, max_value=1.0)},
+        )
 
     with st.container(border=True):
         st.markdown("**Result**")
@@ -224,14 +233,17 @@ with col2:
             "stage1_model": binary_name,
             "stage1": {
                 "diagnosis": branch,
-                "p_malignant": round(p, 4),
                 "threshold": round(thr, 4),
+                "probabilities": {
+                    "benign": round(1 - p, 4),
+                    "malignant": round(p, 4),
+                },
             },
             "stage2": {
                 "model": BRANCH_MODELS[branch]["model_name"],
                 "code": top,
                 "diagnosis": FULL_NAME[top],
-                "probability": round(top_p, 4),
+                "probabilities": {c: round(v, 4) for c, v in pairs},
             },
             "combined": round(joint, 4),
             "tta": use_tta,
@@ -239,7 +251,7 @@ with col2:
         }
         out_path = f"{RESULTS_PREFIX}/{Path(f.name).stem}.json"
 
-        if st.button("Save Results", use_container_width=True):
+        if st.button("Save result to S3", use_container_width=True):
             try:
                 save_json(out_path, record)
                 st.success(f"Saved {Path(f.name).stem}.json")
