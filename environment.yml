@@ -35,6 +35,9 @@ dependencies:
 
   - pip:
       - --extra-index-url https://download.pytorch.org/whl/cu118
+      - fastapi
+      - streamlit
+      - unicorn
       - timm>=1.0
       - torch==2.4.1
       - torchvision==0.19.1
