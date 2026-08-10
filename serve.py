@@ -4,12 +4,15 @@ Skin lesion cascade — binary gate, then the matching subtype model.
     stage 1  binary            benign vs malignant
     stage 2  benign    branch  -> Swin-T           NV / BKL / DF / VASC
              malignant branch  -> EfficientNet-B3  MEL / BCC / AK / SCC
-
-    pip install streamlit torch torchvision boto3 pillow
-    streamlit run cascade_app.py
 """
 
 import io
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urlparse
+
+import boto3
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -22,9 +25,11 @@ from torchvision import models, transforms
 from skin_lesion_project import file_system
 
 BUCKET = "s3://skin-lesion-data-bucket"
+RESULTS_PREFIX = "s3://skin-lesion-data-bucket/diagnosis"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-
+# img_size is pinned per model, the binary and benign checkpoints don't record it,
+# and a wrong size degrades accuracy silently instead of raising.
 BINARY_MODELS = {
     "Swin-T": {
         "path": f"{BUCKET}/saved_models/swin_t_binary_finetuned/swin_t_binary_finetuned_checkpoint.pth",
@@ -98,6 +103,11 @@ def load_branch(name):
     return load(c["path"], c["arch"], c["img_size"], c["classes"])
 
 
+def save_json(s3_path, payload):
+    u = urlparse(s3_path)
+    boto3.client("s3").put_object(Bucket=u.netloc, Key=u.path.lstrip("/"), Body=json.dumps(payload, indent=2).encode(), ContentType="application/json")
+
+
 @torch.inference_mode()
 def logits(m, img, tta=True):
     x = m["tf"](img).unsqueeze(0).to(DEVICE)
@@ -137,14 +147,14 @@ with col1:
         st.caption(f"{f.name} · {img.size[0]}×{img.size[1]} · {len(f.getvalue())/1024:.0f} KB")
 
     if img is None:
-        st.info("Add a lesion image to run the diagnosis.")
+        st.info("Add a lesion image to run the cascade.")
 
     st.divider()
     st.subheader("Settings")
     binary_name = st.selectbox("Stage 1 model", list(BINARY_MODELS.keys()))
     use_tta = st.checkbox("Test-time augmentation", value=True)
 
-    if st.button("Run cascade", type="primary", disabled=img is None,
+    if st.button("Run Diagnosis", type="primary", disabled=img is None,
                  use_container_width=True):
         st.session_state.run = True
 
@@ -201,11 +211,38 @@ with col2:
                           for c, v in pairs]),
             hide_index=True, use_container_width=True,
             column_config={"Probability": st.column_config.ProgressColumn(
-                "Probability", format="%.3f", min_value=0.0, max_value=1.0)},
-        )
+                "Probability", format="%.3f", min_value=0.0, max_value=1.0)})
 
     with st.container(border=True):
         st.markdown("**Result**")
         r1, r2 = st.columns([2, 1])
         r1.metric(top, FULL_NAME[top])
         r2.metric("Combined", f"{joint:.4f}")
+
+        record = {
+            "image": f.name,
+            "stage1_model": binary_name,
+            "stage1": {
+                "diagnosis": branch,
+                "p_malignant": round(p, 4),
+                "threshold": round(thr, 4),
+            },
+            "stage2": {
+                "model": BRANCH_MODELS[branch]["model_name"],
+                "code": top,
+                "diagnosis": FULL_NAME[top],
+                "probability": round(top_p, 4),
+            },
+            "combined": round(joint, 4),
+            "tta": use_tta,
+            "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        out_path = f"{RESULTS_PREFIX}/{Path(f.name).stem}.json"
+
+        if st.button("Save Results", use_container_width=True):
+            try:
+                save_json(out_path, record)
+                st.success(f"Saved {Path(f.name).stem}.json")
+            except Exception as e:
+                st.error(f"Save failed: {e}")
+        st.caption(out_path)
