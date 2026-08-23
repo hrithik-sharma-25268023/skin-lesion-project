@@ -1,9 +1,9 @@
 """
-Skin lesion cascade — binary gate, then the matching subtype model.
+Skin lesion project, binary gate, then the relevant subtype model.
 
-    stage 1  binary            benign vs malignant
-    stage 2  benign    branch  -> Swin-T           NV / BKL / DF / VASC
-             malignant branch  -> EfficientNet-B3  MEL / BCC / AK / SCC
+    stage 1  binary:- benign vs malignant
+    stage 2  benign:- branch  -> Swin-T {NV / BKL / DF / VASC}
+             malignant:- branch  -> EfficientNet-B3  {MEL / BCC / AK / SCC}
 """
 
 import io
@@ -28,8 +28,7 @@ BUCKET = "s3://skin-lesion-data-bucket"
 RESULTS_PREFIX = "s3://skin-lesion-data-bucket/diagnosis"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# img_size is pinned per model — the binary and benign checkpoints don't record it,
-# and a wrong size degrades accuracy silently instead of raising.
+
 BINARY_MODELS = {
     "Swin-T": {
         "path": f"{BUCKET}/saved_models/swin_t_binary_finetuned/swin_t_binary_finetuned_checkpoint.pth",
@@ -62,7 +61,7 @@ FULL_NAME = {
     "AK": "Actinic keratosis", "SCC": "Squamous cell carcinoma",
 }
 
-st.set_page_config(page_title="Skin lesion cascade", layout="wide")
+st.set_page_config(page_title="Skin Lesion Project", layout="wide")
 
 
 @st.cache_resource(show_spinner="Loading model…")
@@ -149,7 +148,7 @@ with col1:
     if f:
         img = Image.open(io.BytesIO(f.getvalue())).convert("RGB")
         st.image(img, use_container_width=True)
-        st.caption(f"{f.name} · {img.size[0]}×{img.size[1]} · {len(f.getvalue())/1024:.0f} KB")
+        st.caption(f"{f.name} · {100}×{100} · {len(f.getvalue())/1024:.0f} KB")
 
     if img is None:
         st.info("Add a lesion image to run the cascade.")
@@ -165,9 +164,6 @@ with col1:
 
 bcfg = BINARY_MODELS[binary_name]
 
-# Clear stale results whenever the inputs behind them change: a new file, a
-# different stage 1 model, or TTA toggled. Streamlit reruns on any of these, and
-# only one widget can change per rerun, so this never eats a fresh button press.
 sig = (f.file_id if f else None, binary_name, use_tta)
 if st.session_state.get("sig") != sig:
     st.session_state.sig = sig
@@ -200,11 +196,12 @@ with col2:
         st.markdown("**Stage 1 · Binary gate**")
         st.caption(f"{binary_name} · {gate['size']}px")
 
-        a, b = st.columns(2)
-        a.metric("P(malignant)", f"{p:.4f}", f"{p - thr:+.4f} vs threshold",
+        a, b, c = st.columns(3)
+        a.metric("P(malignant)", f"{p:.3f}", f"{p - thr:+.3f} vs threshold",
                  delta_color="inverse" if branch == "benign" else "normal")
-        b.metric("Routed to", branch.capitalize())
-        st.progress(p, text=f"threshold {thr:.3f}")
+        b.metric("Threshold", f"{thr:.3f}")
+        c.metric("Routed to", branch.capitalize())
+        st.progress(p)
 
     f1, f2 = st.columns(2)
     f1.success("Benign branch — selected" if branch == "benign" else "Benign branch — not taken")
@@ -251,7 +248,7 @@ with col2:
         }
         out_path = f"{RESULTS_PREFIX}/{Path(f.name).stem}.json"
 
-        if st.button("Save result to S3", use_container_width=True):
+        if st.button("Save results", use_container_width=True):
             try:
                 save_json(out_path, record)
                 st.success(f"Saved {Path(f.name).stem}.json")
